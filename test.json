@@ -1,0 +1,16 @@
+[
+    {
+        "url": "https://printprobdb.psc.edu/iiif/books/clark/painesimmons_8675_309_00height_thedoctrine1ed/book_color/painesimmons_8675_309_00height_thedoctrine1ed-0021.tif",
+        "identifier": "painesimmons_8675_309_00height_thedoctrine1ed-0021",
+        "custom": [
+            {
+                "region_x": 11,
+                "region_y": 200,
+                "region_width": 20,
+                "region_height": 36,
+                "size_width": 20,
+                "size_height": 36
+            }
+        ]
+    }
+]
