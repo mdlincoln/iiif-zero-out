@@ -17,10 +17,10 @@ BASE_SMALLER_SIZES = (16, 32, 64, 128, 256, 512, 1024, 2048, 4096)
 class BBox:
     def __init__(
         self,
-        region_x: int,
-        region_y: int,
-        region_w: int,
-        region_h: int,
+        region_x: int = None,
+        region_y: int = None,
+        region_w: int = None,
+        region_h: int = None,
         size_w: int = None,
         size_h: int = None,
     ) -> None:
@@ -33,6 +33,8 @@ class BBox:
 
     @property
     def region_string(self) -> str:
+        if self.region_x is None:
+            return "full"
         return f"{self.region_x},{self.region_y},{self.region_w},{self.region_h}"
 
     @property
@@ -85,11 +87,12 @@ class IIIFTile:
         """
         return self.image_path / self.bbox.path.parts[0]
 
+    @property
     def exists(self) -> bool:
         return self.path.exists()
 
     def create(self) -> None:
-        if self.exists():
+        if self.exists:
             return None
         self.dir.mkdir(parents=True, exist_ok=True)
         response = requests.get(self.url)
@@ -99,7 +102,7 @@ class IIIFTile:
             img.write(response.content)
 
     def clean(self) -> None:
-        if self.exists():
+        if self.exists:
             # Must use shutil because pathlib's unlink() will not recursively remove directories
             shutil.rmtree(self.top_path)
 
@@ -113,44 +116,70 @@ class IIIFImage:
         self,
         converter_domain: str,
         converter_path: Path,
+        tile_size: int,
         source_url: str,
         identifier: str,
         custom_tiles: list[BBox] = [],
     ) -> None:
         self.converter_domain = converter_domain
         self.converter_path = converter_path
+        self.tile_size = tile_size
         self.source_url = source_url
         self.identifier = identifier
+        self.custom_tiles = custom_tiles
         self.info = {}
         self.tiles = []
-        # self.generate_default_tiles()
-        # self.generate_custom_tiles(custom_tiles)
+        self.downsized_versions = []
+        # self.init_default_tiles()
+        # self.init_custom_tiles(custom_tiles)
 
-    def generate_default_tiles(self) -> None:
-        if not bool(self.info):
-            self.get_info()
+    @property
+    def info_exists(self) -> bool:
+        return bool(self.info)
 
-        scaling_factors: list[int] = [
-            sf for sf in BASE_SCALING_FACTORS if sf < ceil(self.min_dim)
-        ]
+    @classmethod
+    def get_scaling_factors(cls, min_dim: int, tile_size: int) -> list[int]:
+        """
+        Determine which scaling factors, used in the creation of partial tiles, should be created based on the original dimensions of the image.
+        """
 
-    def generate_custom_tiles(self, custom_tiles) -> None:
-        for custom_tile in custom_tiles:
+        return [sf for sf in BASE_SCALING_FACTORS if sf < ceil(min_dim / tile_size)]
+
+    @classmethod
+    def get_downsizing_levels(cls, width: int) -> list[int]:
+        """
+        Determine which series of small version of the image (to be used when zoomed out) should be downloaded.
+
+        Requires requesting the original endpoint's info.json.
+        """
+        return [s for s in BASE_SMALLER_SIZES if s < width]
+
+    def init_default_tiles(self) -> None:
+        self.scaling_factors = IIIFImage.get_scaling_factors(
+            min_dim=self.min_dim, tile_size=self.tile_size
+        )
+
+    def init_downsized_versions(self) -> None:
+        ds_levels = IIIFImage.get_downsizing_levels(width=self.max_dim)
+        for ds in ds_levels:
+            downsized_tile = IIIFTile(
+                image_source_url=self.source_url,
+                image_path=self.path,
+                bbox=BBox(size_w=ds),
+            )
+            self.tiles.append(downsized_tile)
+
+    def init_custom_tiles(self) -> None:
+        for custom_tile in self.custom_tiles:
             tile = IIIFTile(
                 image_path=self.path,
                 image_source_url=self.url,
-                bbox=BBox(
-                    region_x=custom_tile["region_x"],
-                    region_y=custom_tile["region_y"],
-                    region_w=custom_tile["region_w"],
-                    region_h=custom_tile["region_h"],
-                    size_w=custom_tile["size_w"],
-                    size_h=custom_tile["size_h"],
-                ),
+                bbox=custom_tile,
             )
             self.tiles.append(tile)
 
     def translate_info(self, input: dict) -> dict:
+
         new_info = {
             "@context": "http://iiif.io/api/image/2/context.json",
             "@id": f"{self.converter_domain}/{self.identifier}",
@@ -159,13 +188,19 @@ class IIIFImage:
                 {"formats": ["jpg"], "qualities": ["default"]},
             ],
             "protocol": "http://iiif.io/api/image",
-            # "sizes": [
-            #     {"width": ds, "height": "full"}
-            #     for ds in [] self.get_downsizing_levels()
-            # ],
-            # "tiles": [
-            #     {"scaleFactors": self.get_scaling_factors(), "width": self.tile_size}
-            # ],
+            "sizes": [
+                {"width": ds, "height": "full"}
+                for ds in IIIFImage.get_downsizing_levels(width=input["width"])
+            ],
+            "tiles": [
+                {
+                    "scaleFactors": IIIFImage.get_scaling_factors(
+                        min_dim=min(input["width"], input["height"]),
+                        tile_size=self.tile_size,
+                    ),
+                    "width": self.tile_size,
+                }
+            ],
             "width": input["width"],
             "height": input["height"],
         }
@@ -223,17 +258,26 @@ class IIIFImage:
     def json(self) -> str:
         return f"{self.url}/info.json"
 
+    @property
     def exists(self) -> bool:
         return self.path.exists()
 
+    @property
     def is_complete(self) -> bool:
         """
         Have all the image tiles as well as the info.json file for this image been created?
         """
         return False
 
+    def initialize_children(self) -> None:
+        self.get_info()
+        self.init_downsized_versions()
+        self.init_default_tiles()
+        if bool(self.custom_tiles):
+            self.init_custom_tiles()
+
     def create(self) -> None:
-        if not self.exists():
+        if not self.exists:
             self.make_dir()
         for tile in self.tiles:
             tile.create()
@@ -242,7 +286,7 @@ class IIIFImage:
         self.path.mkdir(parents=True, exist_ok=True)
 
     def n_files_to_create(self) -> int:
-        return sum([tile.exists() for tile in self.tiles])
+        return sum([tile.exists for tile in self.tiles])
 
 
 class ZeroConverter:
@@ -251,22 +295,29 @@ class ZeroConverter:
     """
 
     def __init__(
-        self, output_path: Path, specs: list, domain: str, sleep: float = 0.0
+        self,
+        output_path: Path,
+        specs: list,
+        domain: str,
+        tile_size: int = 256,
+        sleep: float = 0.0,
     ) -> None:
         self.path = output_path
         self.domain = domain
+        self.tile_size = tile_size
         self.sleep = sleep
         self.images = []
 
         for spec in specs:
             custom_tiles = []
             if "custom_tiles" in specs:
-                custom_tiles = spec["custom_tiles"]
+                custom_tiles = [BBox(**t) for t in spec["custom_tiles"]]
             img = IIIFImage(
                 converter_domain=self.domain,
                 converter_path=self.path,
                 source_url=spec["url"],
                 identifier=spec["identifier"],
+                tile_size=self.tile_size,
                 custom_tiles=custom_tiles,
             )
             self.images.append(img)

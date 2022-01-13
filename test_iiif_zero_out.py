@@ -78,18 +78,18 @@ def test_tile_create(tile, tmp_path):
     target_path = (
         tmp_path / "30815-primary-0-nativeres.ptif/10,40,45,60/full/0/default.jpg"
     )
-    assert tile.exists() is False
+    assert tile.exists is False
     tile.create()
     assert target_path.exists()
-    assert tile.exists()
+    assert tile.exists
 
 
 def test_tile_clean(tile):
-    assert tile.exists() is False
+    assert tile.exists is False
     tile.create()
-    assert tile.exists()
+    assert tile.exists
     tile.clean()
-    assert tile.exists() is False
+    assert tile.exists is False
 
 
 @pytest.fixture
@@ -99,6 +99,7 @@ def image(tmp_path, specs) -> IIIFImage:
         converter_path=tmp_path,
         source_url=specs[0]["url"],
         identifier=specs[0]["identifier"],
+        tile_size=256,
     )
 
 
@@ -110,6 +111,7 @@ def image_with_custom(tmp_path, specs) -> IIIFImage:
         source_url=specs[1]["url"],
         identifier=specs[1]["identifier"],
         custom_tiles=[BBox(**specs[1]["custom_tiles"][0])],
+        tile_size=256,
     )
 
 
@@ -119,16 +121,16 @@ def test_iiif_image_init(image, tmp_path, specs):
 
 
 def test_iiif_image_dir(image, tmp_path, specs):
-    assert image.exists() is False
+    assert image.exists is False
     image.make_dir()
-    assert image.exists()
+    assert image.exists
 
 
 def test_iiif_image_clean(image, tmp_path, specs):
     image.make_dir()
-    assert image.exists()
+    assert image.exists
     image.clean()
-    assert image.exists() is False
+    assert image.exists is False
 
 
 def test_iiif_image_info(image, tmp_path, specs):
@@ -138,3 +140,24 @@ def test_iiif_image_info(image, tmp_path, specs):
     assert image.info["width"] == 487
     assert image.info["height"] == 640
     assert image.info["@id"] == "http://localhost/30815-primary-0-nativeres.ptif"
+
+
+def test_iiif_image_downscales_init(image, tmp_path, specs):
+    assert bool(image.tiles) is False
+    image.get_info()
+    image.init_downsized_versions()
+    assert any(["full/256,/" in t.url for t in image.tiles])
+    assert any(["full/128,/" in t.url for t in image.tiles])
+    assert any(["full/64,/" in t.url for t in image.tiles])
+    assert any(["full/32,/" in t.url for t in image.tiles])
+    assert any(["full/16,/" in t.url for t in image.tiles])
+
+
+def test_iiif_image_downscales_creation(image, tmp_path, specs):
+    assert bool(image.tiles) is False
+    image.get_info()
+    image.init_downsized_versions()
+    image.create()
+    assert image.info_path.exists()
+    for tile in image.tiles:
+        assert tile.exists
