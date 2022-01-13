@@ -1,9 +1,9 @@
-from typing import Protocol
 import requests
 import json
-from requests.api import request
+import requests
 from tqdm import tqdm
 import os
+import shutil
 from pathlib import Path
 from math import floor, ceil
 import logging
@@ -38,7 +38,7 @@ class BBox:
     @property
     def size_string(self) -> str:
         if self.size_w is None and self.size_h is None:
-            return "max"
+            return "full"
         str_size_w: str = "" if self.size_w is None else str(self.size_w)
         str_size_h: str = "" if self.size_h is None else str(self.size_h)
         return f"{str_size_w},{str_size_h}"
@@ -57,30 +57,41 @@ class IIIFTile:
     An individual tile that has both a parent IIIFImage, as well as a local filepath to be created from that downloaded image.
     """
 
-    def __init__(self, image: "IIIFImage", bbox: BBox) -> None:
-        self.image = image
+    def __init__(self, image_source_url: str, image_path: Path, bbox: BBox) -> None:
+        self.image_source_url = image_source_url
+        self.image_path = image_path
         self.bbox = bbox
 
     @property
     def url(self) -> str:
-        return f"{self.image}/{self.bbox.url}"
+        return f"{self.image_source_url}/{self.bbox.url}/0/default.jpg"
 
     @property
     def path(self) -> Path:
-        tile_path = self.image.path / self.bbox.path
+        tile_path = self.image_path / self.bbox.path / "0/default.jpg"
         return tile_path
 
     @property
+    def dir(self) -> Path:
+        """
+        Immediate parent directory
+        """
+        return self.path.parent
+
+    @property
     def top_path(self) -> Path:
-        return self.image.path / self.bbox.path.parts[0]
+        """
+        Top-level parent directory for this tile
+        """
+        return self.image_path / self.bbox.path.parts[0]
 
     def exists(self) -> bool:
-        return os.path.exists(self.path)
+        return self.path.exists()
 
     def create(self) -> None:
         if self.exists():
             return None
-        self.path.mkdir(parents=True, exist_ok=True)
+        self.dir.mkdir(parents=True, exist_ok=True)
         response = requests.get(self.url)
         if response.status_code != 200:
             raise Exception
@@ -89,7 +100,8 @@ class IIIFTile:
 
     def clean(self) -> None:
         if self.exists():
-            self.top_path.unlink()
+            # Must use shutil because pathlib's unlink() will not recursively remove directories
+            shutil.rmtree(self.top_path)
 
 
 class IIIFImage:
@@ -99,13 +111,15 @@ class IIIFImage:
 
     def __init__(
         self,
-        zeroer: "IIIFZeroer",
-        url: str,
+        converter_domain: str,
+        converter_path: Path,
+        source_url: str,
         identifier: str,
         custom_tiles: list[dict] = [],
     ) -> None:
-        self.zeroer = zeroer
-        self.url = url
+        self.converter_domain = converter_domain
+        self.converter_path = converter_path
+        self.source_url = source_url
         self.identifier = identifier
         self.info = {}
         self.tiles = []
@@ -123,7 +137,8 @@ class IIIFImage:
     def generate_custom_tiles(self, custom_tiles) -> None:
         for custom_tile in custom_tiles:
             tile = IIIFTile(
-                self,
+                image_path=self.path,
+                image_source_url=self.url,
                 bbox=BBox(
                     region_x=custom_tile["region_x"],
                     region_y=custom_tile["region_y"],
@@ -138,7 +153,7 @@ class IIIFImage:
     def translate_info(self, input: dict) -> dict:
         new_info = {
             "@context": "http://iiif.io/api/image/2/context.json",
-            "@id": f"{self.zeroer.domain}/{self.identifier}",
+            "@id": f"{self.converter_domain}/{self.identifier}",
             "profile": [
                 "http://iiif.io/api/image/2/level0.json",
                 {"formats": ["jpg"], "qualities": ["default"]},
@@ -162,7 +177,7 @@ class IIIFImage:
             with self.info_path.open("wb") as info_file:
                 response = requests.get(self.info_url)
                 if response.status_code != 200:
-                    raise Exception(response.content)
+                    raise Exception(f"{response.status_code}: {response.content}")
                 # Rewrite file to match
                 self.info = self.translate_info(response.json())
                 with self.info_path.open("w") as info_file:
@@ -189,12 +204,16 @@ class IIIFImage:
         return max(self.info["width"], self.info["height"])
 
     @property
+    def url(self) -> str:
+        return f"{self.converter_domain}/{self.identifier}"
+
+    @property
     def info_url(self) -> str:
         return f"{self.url}/info.json"
 
     @property
     def path(self) -> Path:
-        return self.zeroer.path / Path(self.identifier)
+        return self.converter_path / Path(self.identifier)
 
     @property
     def info_path(self) -> Path:
@@ -220,7 +239,11 @@ class IIIFImage:
         return sum([tile.exists() for tile in self.tiles])
 
 
-class IIIFZeroer:
+class ZeroConverter:
+    """
+    Accepts the
+    """
+
     def __init__(
         self, output_path: Path, specs: list, domain: str, sleep: float = 0.0
     ) -> None:
@@ -234,8 +257,9 @@ class IIIFZeroer:
             if "custom_tiles" in specs:
                 custom_tiles = spec["custom_tiles"]
             img = IIIFImage(
-                self,
-                url=spec["url"],
+                converter_domain=self.domain,
+                converter_path=self.path,
+                source_url=spec["url"],
                 identifier=spec["identifier"],
                 custom_tiles=custom_tiles,
             )
@@ -284,7 +308,7 @@ def main():
 
     data = json.load(open(sources[0], "r"))
 
-    zeroer = IIIFZeroer(
+    converter = ZeroConverter(
         output_path=Path(opt.output), specs=data, domain="http://localhost"
     )
-    n = zeroer.n_files_to_create()
+    n = converter.n_files_to_create()
