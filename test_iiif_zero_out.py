@@ -1,3 +1,4 @@
+from typing import List, Dict
 from iiif_zero_out import BBox, IIIFTile, IIIFImage, ZeroConverter
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -28,14 +29,31 @@ def test_bbox_exact():
 
 
 @pytest.fixture
-def tile(tmp_path) -> IIIFTile:
-    domain = "http://localhost"
-    specs = [
+def specs() -> List[Dict]:
+    return [
         {
             "url": "https://media.nga.gov/iiif/public/objects/3/0/8/1/5/30815-primary-0-nativeres.ptif",
             "identifier": "30815-primary-0-nativeres.ptif",
-        }
+        },
+        {
+            "url": "https://media.nga.gov/iiif/public/objects/4/6/1/3/2/46132-primary-0-nativeres.ptif/",
+            "identifier": "46132-primary-0-nativeres.ptif",
+            "custom_tiles": [
+                {
+                    "region_x": 10,
+                    "region_y": 40,
+                    "region_w": 45,
+                    "region_h": 60,
+                    "size_w": 20,
+                    "size_h": 30,
+                }
+            ],
+        },
     ]
+
+
+@pytest.fixture
+def tile(tmp_path, specs) -> IIIFTile:
     outdir_path = tmp_path / specs[0]["identifier"]
 
     test_bbox = BBox(region_x=10, region_y=40, region_w=45, region_h=60)
@@ -66,7 +84,7 @@ def test_tile_create(tile, tmp_path):
     assert tile.exists()
 
 
-def test_tile_clean(tile, tmp_path):
+def test_tile_clean(tile):
     assert tile.exists() is False
     tile.create()
     assert tile.exists()
@@ -74,48 +92,49 @@ def test_tile_clean(tile, tmp_path):
     assert tile.exists() is False
 
 
-"""
-
-def test_iiif_image_base():
-    outdir = TemporaryDirectory()
-    outdir_path = Path(outdir.name)
-    specs = [
-        {
-            "url": "https://media.nga.gov/iiif/public/objects/3/0/8/1/5/30815-primary-0-nativeres.ptif",
-            "identifier": "30815-primary-0-nativeres.ptif",
-        }
-    ]
-    z = ZeroConverter(output_path=outdir_path, specs=specs, domain="http://localhost")
-    image = IIIFImage(
-        converter=z, source_url=specs[0]["url"], identifier=specs[0]["identifier"]
+@pytest.fixture
+def image(tmp_path, specs) -> IIIFImage:
+    return IIIFImage(
+        converter_domain="http://localhost",
+        converter_path=tmp_path,
+        source_url=specs[0]["url"],
+        identifier=specs[0]["identifier"],
     )
-    assert image.path == outdir_path / Path("30815-primary-0-nativeres.ptif")
-    assert image.info_path == outdir_path / "30815-primary-0-nativeres.ptif/info.json"
+
+
+@pytest.fixture
+def image_with_custom(tmp_path, specs) -> IIIFImage:
+    return IIIFImage(
+        converter_domain="http://localhost",
+        converter_path=tmp_path,
+        source_url=specs[1]["url"],
+        identifier=specs[1]["identifier"],
+        custom_tiles=[BBox(**specs[1]["custom_tiles"][0])],
+    )
+
+
+def test_iiif_image_init(image, tmp_path, specs):
+    assert image.path == tmp_path / specs[0]["identifier"]
+    assert image.info_path == tmp_path / specs[0]["identifier"] / "info.json"
+
+
+def test_iiif_image_dir(image, tmp_path, specs):
+    assert image.exists() is False
+    image.make_dir()
+    assert image.exists()
+
+
+def test_iiif_image_clean(image, tmp_path, specs):
+    image.make_dir()
+    assert image.exists()
+    image.clean()
+    assert image.exists() is False
+
+
+def test_iiif_image_info(image, tmp_path, specs):
+    assert image.info_path.exists() is False
     image.get_info()
+    assert image.info_path.exists() is True
     assert image.info["width"] == 487
     assert image.info["height"] == 640
     assert image.info["@id"] == "http://localhost/30815-primary-0-nativeres.ptif"
-
-
-def test_iiif_tile_base():
-    outdir = TemporaryDirectory()
-    outdir_path = Path(outdir.name)
-    specs = [
-        {
-            "url": "https://media.nga.gov/iiif/public/objects/3/0/8/1/5/30815-primary-0-nativeres.ptif",
-            "identifier": "30815-primary-0-nativeres.ptif",
-        }
-    ]
-    z = ZeroConverter(output_path=outdir_path, specs=specs, domain="http://localhost")
-    image = IIIFImage(
-        converter=z, source_url=specs[0]["url"], identifier=specs[0]["identifier"]
-    )
-    bbox = BBox(region_x=100, region_y=100, region_w=120, region_h=210)
-    tile = IIIFTile(image=image, bbox=bbox)
-    assert (
-        tile.url
-        == "https://media.nga.gov/iiif/public/objects/3/0/8/1/5/30815-primary-0-nativeres.ptif/100,100,210,210/full/0/default.jpg"
-    )
-    assert tile.path == outdir_path / Path("100,100,210,210/full/0/default.jpg")
-
-"""

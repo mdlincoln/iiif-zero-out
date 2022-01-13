@@ -115,7 +115,7 @@ class IIIFImage:
         converter_path: Path,
         source_url: str,
         identifier: str,
-        custom_tiles: list[dict] = [],
+        custom_tiles: list[BBox] = [],
     ) -> None:
         self.converter_domain = converter_domain
         self.converter_path = converter_path
@@ -159,13 +159,13 @@ class IIIFImage:
                 {"formats": ["jpg"], "qualities": ["default"]},
             ],
             "protocol": "http://iiif.io/api/image",
-            "sizes": [
-                {"width": ds, "height": "full"}
-                for ds in []  # self.get_downsizing_levels()
-            ],
-            "tiles": [
-                # {"scaleFactors": self.get_scaling_factors(), "width": self.tile_size}
-            ],
+            # "sizes": [
+            #     {"width": ds, "height": "full"}
+            #     for ds in [] self.get_downsizing_levels()
+            # ],
+            # "tiles": [
+            #     {"scaleFactors": self.get_scaling_factors(), "width": self.tile_size}
+            # ],
             "width": input["width"],
             "height": input["height"],
         }
@@ -175,10 +175,10 @@ class IIIFImage:
         self.make_dir()
         if not self.info_path.exists():
             with self.info_path.open("wb") as info_file:
-                response = requests.get(self.info_url)
+                response = requests.get(self.source_info_url)
                 if response.status_code != 200:
                     raise Exception(f"{response.status_code}: {response.content}")
-                # Rewrite file to match
+                # Rewrite file to new specifications
                 self.info = self.translate_info(response.json())
                 with self.info_path.open("w") as info_file:
                     json.dump(self.info, info_file)
@@ -189,7 +189,7 @@ class IIIFImage:
         """
         Clean this image's whole directory
         """
-        pass
+        shutil.rmtree(self.path)
 
     @property
     def min_dim(self) -> int:
@@ -208,8 +208,8 @@ class IIIFImage:
         return f"{self.converter_domain}/{self.identifier}"
 
     @property
-    def info_url(self) -> str:
-        return f"{self.url}/info.json"
+    def source_info_url(self) -> str:
+        return f"{self.source_url}/info.json"
 
     @property
     def path(self) -> Path:
@@ -224,7 +224,13 @@ class IIIFImage:
         return f"{self.url}/info.json"
 
     def exists(self) -> bool:
-        return os.path.exists(self.path)
+        return self.path.exists()
+
+    def is_complete(self) -> bool:
+        """
+        Have all the image tiles as well as the info.json file for this image been created?
+        """
+        return False
 
     def create(self) -> None:
         if not self.exists():
