@@ -200,8 +200,7 @@ def test_iiif_image_default_tiles_create(image, specs):
 def test_iiif_image_custom_tiles_create(image_with_custom):
     assert bool(image_with_custom.tiles) is False
     image_with_custom.get_info()
-    image_with_custom.init_default_tiles()
-    os.system(f"open {image_with_custom.path}")
+    image_with_custom.initialize_children()
     w = 12048
     h = 17847
     n_target_tiles = (
@@ -210,9 +209,17 @@ def test_iiif_image_custom_tiles_create(image_with_custom):
         + ((w // 2048 + 1) * (h // 2048 + 1))
         + ((w // 4096 + 1) * (h // 4096 + 1))
         + ((w // 8192 + 1) * (h // 8192 + 1))
+        + 1  # custom tile
+        + 10  # downsized variations
     )
     assert image_with_custom.n_files_to_create() == n_target_tiles
-    # image_with_custom.create()
-    # assert image_with_custom.info_path.exists()
-    # for tile in image_with_custom.tiles:
-    #     assert tile.exists
+    assert all([not t.exists for t in image_with_custom.tiles])
+    assert image_with_custom.is_complete is False
+
+
+def test_iiif_image_partial(image):
+    image.initialize_children()
+    n_to_create = image.n_files_to_create()
+    image.tiles[0].create()
+    image.tiles[1].create()
+    assert image.n_files_to_create() == n_to_create - 2

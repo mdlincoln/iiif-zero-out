@@ -10,7 +10,7 @@ import optparse
 
 
 BASE_SCALING_FACTORS = (1, 2, 4, 8, 16, 32, 64, 128, 256)
-BASE_SMALLER_SIZES = (16, 32, 64, 128, 256, 512, 1024, 2048, 4096)
+BASE_SMALLER_SIZES = (16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192)
 
 
 class BBox:
@@ -128,9 +128,6 @@ class IIIFImage:
         self.custom_tiles = custom_tiles
         self.info = {}
         self.tiles = []
-        self.downsized_versions = []
-        # self.init_default_tiles()
-        # self.init_custom_tiles(custom_tiles)
 
     @property
     def info_exists(self) -> bool:
@@ -207,7 +204,7 @@ class IIIFImage:
         for custom_tile in self.custom_tiles:
             tile = IIIFTile(
                 image_path=self.path,
-                image_source_url=self.url,
+                image_source_url=self.source_url,
                 bbox=custom_tile,
             )
             self.tiles.append(tile)
@@ -301,7 +298,8 @@ class IIIFImage:
         """
         Have all the image tiles as well as the info.json file for this image been created?
         """
-        return False
+        tiles_created: bool = all(t.exists for t in self.tiles)
+        return tiles_created and self.info_exists
 
     def initialize_children(self) -> None:
         self.get_info()
@@ -311,8 +309,6 @@ class IIIFImage:
             self.init_custom_tiles()
 
     def create(self) -> None:
-        if not self.exists:
-            self.make_dir()
         for tile in self.tiles:
             tile.create()
 
