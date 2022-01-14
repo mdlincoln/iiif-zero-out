@@ -161,3 +161,33 @@ def test_iiif_image_downscales_creation(image, tmp_path, specs):
     assert image.info_path.exists()
     for tile in image.tiles:
         assert tile.exists
+
+
+def test_iiif_image_default_tiles_init(image, specs):
+    assert bool(image.tiles) is False
+    image.get_info()
+    image.init_default_tiles()
+    assert (
+        f"http://localhost/{specs[0]['identifier']}/0,0,256,256/256,/0/default.jpg"
+        in [t.url for t in image.tiles]
+    )
+    assert (
+        f"http://localhost/{specs[0]['identifier']}/0,256,256,256/256,/0/default.jpg"
+        in [t.url for t in image.tiles]
+    )
+    assert (
+        f"http://localhost/{specs[0]['identifier']}/0,512,256,128/256,/0/default.jpg"
+        in [t.url for t in image.tiles]
+    )
+    assert (
+        f"http://localhost/{specs[0]['identifier']}/256,0,231,256/231,/0/default.jpg"
+        in [t.url for t in image.tiles]
+    )
+    assert (
+        f"http://localhost/{specs[0]['identifier']}/256,256,231,256/231,/0/default.jpg"
+        in [t.url for t in image.tiles]
+    )
+    assert (
+        f"http://localhost/{specs[0]['identifier']}/256,512,231,128/231,/0/default.jpg"
+        in [t.url for t in image.tiles]
+    )

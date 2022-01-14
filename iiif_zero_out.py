@@ -5,7 +5,6 @@ from tqdm import tqdm
 import os
 import shutil
 from pathlib import Path
-from math import floor, ceil
 import logging
 import optparse
 
@@ -143,7 +142,7 @@ class IIIFImage:
         Determine which scaling factors, used in the creation of partial tiles, should be created based on the original dimensions of the image.
         """
 
-        return [sf for sf in BASE_SCALING_FACTORS if sf < ceil(min_dim / tile_size)]
+        return [sf for sf in BASE_SCALING_FACTORS if sf <= min_dim // tile_size]
 
     @classmethod
     def get_downsizing_levels(cls, width: int) -> list[int]:
@@ -155,9 +154,44 @@ class IIIFImage:
         return [s for s in BASE_SMALLER_SIZES if s < width]
 
     def init_default_tiles(self) -> None:
-        self.scaling_factors = IIIFImage.get_scaling_factors(
+        scaling_factors = IIIFImage.get_scaling_factors(
             min_dim=self.min_dim, tile_size=self.tile_size
         )
+        for sf in scaling_factors:
+            cropsize = self.tile_size * sf
+            full_widths = [
+                (i * cropsize, cropsize)
+                for i in range(0, self.info["width"] // cropsize)
+            ]
+            remainder_width = self.info["width"] % cropsize
+            if remainder_width > 0:
+                full_widths.append(
+                    (self.info["width"] - remainder_width, remainder_width)
+                )
+
+            full_heights = [
+                (i * cropsize, cropsize)
+                for i in range(0, self.info["height"] // cropsize)
+            ]
+            remainder_height = self.info["height"] % cropsize
+            if remainder_height > 0:
+                full_heights.append(
+                    (self.info["height"] - remainder_height, remainder_height)
+                )
+
+            for y in full_heights:
+                for x in full_widths:
+                    bb = BBox(
+                        region_x=x[0],
+                        region_y=y[0],
+                        region_w=x[1],
+                        region_h=y[1],
+                        size_w=x[1],
+                    )
+                    tile = IIIFTile(
+                        image_path=self.path, image_source_url=self.url, bbox=bb
+                    )
+                    self.tiles.append(tile)
 
     def init_downsized_versions(self) -> None:
         ds_levels = IIIFImage.get_downsizing_levels(width=self.max_dim)
