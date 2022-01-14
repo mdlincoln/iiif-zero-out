@@ -118,14 +118,14 @@ class IIIFImage:
         tile_size: int,
         source_url: str,
         identifier: str,
-        custom_tiles: list[BBox] = [],
+        custom_tile_boxes: list[BBox] = [],
     ) -> None:
         self.converter_domain = converter_domain
         self.converter_path = converter_path
         self.tile_size = tile_size
         self.source_url = source_url
         self.identifier = identifier
-        self.custom_tiles = custom_tiles
+        self.custom_tile_boxes = custom_tile_boxes
         self.info = {}
         self.tiles = []
 
@@ -201,7 +201,7 @@ class IIIFImage:
             self.tiles.append(downsized_tile)
 
     def init_custom_tiles(self) -> None:
-        for custom_tile in self.custom_tiles:
+        for custom_tile in self.custom_tile_boxes:
             tile = IIIFTile(
                 image_path=self.path,
                 image_source_url=self.source_url,
@@ -305,7 +305,7 @@ class IIIFImage:
         self.get_info()
         self.init_downsized_versions()
         self.init_default_tiles()
-        if bool(self.custom_tiles):
+        if bool(self.custom_tile_boxes):
             self.init_custom_tiles()
 
     def create(self) -> None:
@@ -339,16 +339,16 @@ class ZeroConverter:
         self.images = []
 
         for spec in specs:
-            custom_tiles = []
+            custom_tile_boxes = []
             if "custom_tiles" in specs:
-                custom_tiles = [BBox(**t) for t in spec["custom_tiles"]]
+                custom_tile_boxes = [BBox(**t) for t in spec["custom_tiles"]]
             img = IIIFImage(
                 converter_domain=self.domain,
                 converter_path=self.path,
                 source_url=spec["url"],
                 identifier=spec["identifier"],
                 tile_size=self.tile_size,
-                custom_tiles=custom_tiles,
+                custom_tile_boxes=custom_tile_boxes,
             )
             self.images.append(img)
 

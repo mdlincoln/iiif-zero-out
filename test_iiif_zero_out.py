@@ -110,7 +110,7 @@ def image_with_custom(tmp_path, specs) -> IIIFImage:
         converter_path=tmp_path,
         source_url=specs[1]["url"],
         identifier=specs[1]["identifier"],
-        custom_tiles=[BBox(**specs[1]["custom_tiles"][0])],
+        custom_tile_boxes=[BBox(**specs[1]["custom_tiles"][0])],
         tile_size=512,
     )
 
