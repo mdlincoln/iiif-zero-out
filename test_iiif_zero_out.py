@@ -111,7 +111,7 @@ def image_with_custom(tmp_path, specs) -> IIIFImage:
         source_url=specs[1]["url"],
         identifier=specs[1]["identifier"],
         custom_tiles=[BBox(**specs[1]["custom_tiles"][0])],
-        tile_size=256,
+        tile_size=512,
     )
 
 
@@ -153,7 +153,7 @@ def test_iiif_image_downscales_init(image, tmp_path, specs):
     assert any(["full/16,/" in t.url for t in image.tiles])
 
 
-def test_iiif_image_downscales_creation(image, tmp_path, specs):
+def test_iiif_image_downscales_create(image, tmp_path, specs):
     assert bool(image.tiles) is False
     image.get_info()
     image.init_downsized_versions()
@@ -167,27 +167,52 @@ def test_iiif_image_default_tiles_init(image, specs):
     assert bool(image.tiles) is False
     image.get_info()
     image.init_default_tiles()
-    assert (
-        f"http://localhost/{specs[0]['identifier']}/0,0,256,256/256,/0/default.jpg"
-        in [t.url for t in image.tiles]
+    assert f"{specs[0]['url']}/0,0,256,256/256,/0/default.jpg" in [
+        t.url for t in image.tiles
+    ]
+    assert f"{specs[0]['url']}/0,256,256,256/256,/0/default.jpg" in [
+        t.url for t in image.tiles
+    ]
+    assert f"{specs[0]['url']}/0,512,256,128/256,/0/default.jpg" in [
+        t.url for t in image.tiles
+    ]
+    assert f"{specs[0]['url']}/256,0,231,256/231,/0/default.jpg" in [
+        t.url for t in image.tiles
+    ]
+    assert f"{specs[0]['url']}/256,256,231,256/231,/0/default.jpg" in [
+        t.url for t in image.tiles
+    ]
+    assert f"{specs[0]['url']}/256,512,231,128/231,/0/default.jpg" in [
+        t.url for t in image.tiles
+    ]
+
+
+def test_iiif_image_default_tiles_create(image, specs):
+    assert bool(image.tiles) is False
+    image.get_info()
+    image.init_default_tiles()
+    image.create()
+    assert image.info_path.exists()
+    for tile in image.tiles:
+        assert tile.exists
+
+
+def test_iiif_image_custom_tiles_create(image_with_custom):
+    assert bool(image_with_custom.tiles) is False
+    image_with_custom.get_info()
+    image_with_custom.init_default_tiles()
+    os.system(f"open {image_with_custom.path}")
+    w = 12048
+    h = 17847
+    n_target_tiles = (
+        ((w // 512 + 1) * (h // 512 + 1))
+        + ((w // 1024 + 1) * (h // 1024 + 1))
+        + ((w // 2048 + 1) * (h // 2048 + 1))
+        + ((w // 4096 + 1) * (h // 4096 + 1))
+        + ((w // 8192 + 1) * (h // 8192 + 1))
     )
-    assert (
-        f"http://localhost/{specs[0]['identifier']}/0,256,256,256/256,/0/default.jpg"
-        in [t.url for t in image.tiles]
-    )
-    assert (
-        f"http://localhost/{specs[0]['identifier']}/0,512,256,128/256,/0/default.jpg"
-        in [t.url for t in image.tiles]
-    )
-    assert (
-        f"http://localhost/{specs[0]['identifier']}/256,0,231,256/231,/0/default.jpg"
-        in [t.url for t in image.tiles]
-    )
-    assert (
-        f"http://localhost/{specs[0]['identifier']}/256,256,231,256/231,/0/default.jpg"
-        in [t.url for t in image.tiles]
-    )
-    assert (
-        f"http://localhost/{specs[0]['identifier']}/256,512,231,128/231,/0/default.jpg"
-        in [t.url for t in image.tiles]
-    )
+    assert image_with_custom.n_files_to_create() == n_target_tiles
+    # image_with_custom.create()
+    # assert image_with_custom.info_path.exists()
+    # for tile in image_with_custom.tiles:
+    #     assert tile.exists

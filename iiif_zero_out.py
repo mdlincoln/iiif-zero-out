@@ -189,7 +189,7 @@ class IIIFImage:
                         size_w=x[1],
                     )
                     tile = IIIFTile(
-                        image_path=self.path, image_source_url=self.url, bbox=bb
+                        image_path=self.path, image_source_url=self.source_url, bbox=bb
                     )
                     self.tiles.append(tile)
 
@@ -320,7 +320,7 @@ class IIIFImage:
         self.path.mkdir(parents=True, exist_ok=True)
 
     def n_files_to_create(self) -> int:
-        return sum([tile.exists for tile in self.tiles])
+        return sum([not tile.exists for tile in self.tiles])
 
 
 class ZeroConverter:
