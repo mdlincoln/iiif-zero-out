@@ -126,6 +126,7 @@ class IIIFImage:
         self.source_url = source_url
         self.identifier = identifier
         self.custom_tile_boxes = custom_tile_boxes
+        self.initialized = False  # Have all tile objects been initialized?
         self.info = {}
         self.tiles = []
 
@@ -307,8 +308,13 @@ class IIIFImage:
         self.init_default_tiles()
         if bool(self.custom_tile_boxes):
             self.init_custom_tiles()
+        self.initialized = True
 
     def create(self) -> None:
+        if not self.initialized:
+            logging.warning(
+                f"Image {self.identifier} has not had its children tiles initialized yet"
+            )
         for tile in self.tiles:
             tile.create()
 
@@ -356,7 +362,11 @@ class ZeroConverter:
         """
         Clean the entire directory
         """
-        pass
+        shutil.rmtree(self.path)
+
+    def initialize_images(self) -> None:
+        for image in tqdm(self.images):
+            image.initialize_children()
 
     def n_files_to_create(self) -> int:
         return sum([image.n_files_to_create() for image in self.images])

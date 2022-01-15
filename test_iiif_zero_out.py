@@ -1,10 +1,6 @@
-from typing import List, Dict
 from iiif_zero_out import BBox, IIIFTile, IIIFImage, ZeroConverter
 from pathlib import Path
-from tempfile import TemporaryDirectory
-import requests
 import pytest
-import os
 
 
 def test_bbox_max():
@@ -29,14 +25,14 @@ def test_bbox_exact():
 
 
 @pytest.fixture
-def specs() -> List[Dict]:
+def specs() -> list[dict]:
     return [
         {
             "url": "https://media.nga.gov/iiif/public/objects/3/0/8/1/5/30815-primary-0-nativeres.ptif",
             "identifier": "30815-primary-0-nativeres.ptif",
         },
         {
-            "url": "https://media.nga.gov/iiif/public/objects/4/6/1/3/2/46132-primary-0-nativeres.ptif/",
+            "url": "https://media.nga.gov/iiif/640/public/objects/1/5/7/0/4/3/157043-primary-0-nativeres.ptif",
             "identifier": "46132-primary-0-nativeres.ptif",
             "custom_tiles": [
                 {
@@ -111,7 +107,7 @@ def image_with_custom(tmp_path, specs) -> IIIFImage:
         source_url=specs[1]["url"],
         identifier=specs[1]["identifier"],
         custom_tile_boxes=[BBox(**specs[1]["custom_tiles"][0])],
-        tile_size=512,
+        tile_size=128,
     )
 
 
@@ -201,20 +197,18 @@ def test_iiif_image_custom_tiles_create(image_with_custom):
     assert bool(image_with_custom.tiles) is False
     image_with_custom.get_info()
     image_with_custom.initialize_children()
-    w = 12048
-    h = 17847
+    w = 640
+    h = 472
     n_target_tiles = (
-        ((w // 512 + 1) * (h // 512 + 1))
-        + ((w // 1024 + 1) * (h // 1024 + 1))
-        + ((w // 2048 + 1) * (h // 2048 + 1))
-        + ((w // 4096 + 1) * (h // 4096 + 1))
-        + ((w // 8192 + 1) * (h // 8192 + 1))
+        ((w // 128) * (h // 128 + 1))
+        + ((w // 256 + 1) * (h // 256 + 1))
         + 1  # custom tile
-        + 10  # downsized variations
+        + 6  # downsized variations
     )
     assert image_with_custom.n_files_to_create() == n_target_tiles
     assert all([not t.exists for t in image_with_custom.tiles])
     assert image_with_custom.is_complete is False
+    image_with_custom.create()
 
 
 def test_iiif_image_partial(image):
@@ -223,3 +217,26 @@ def test_iiif_image_partial(image):
     image.tiles[0].create()
     image.tiles[1].create()
     assert image.n_files_to_create() == n_to_create - 2
+
+
+@pytest.fixture
+def converter(specs, tmp_path) -> ZeroConverter:
+    return ZeroConverter(
+        output_path=tmp_path, specs=specs, domain="http://localhost", tile_size=256
+    )
+
+
+def test_iiif_converter_init(converter):
+    assert len(converter.images) == 2
+    assert converter.n_files_to_create() == 0
+    assert all([not i.initialized for i in converter.images])
+    converter.initialize_images()
+    assert all([i.initialized for i in converter.images])
+    assert converter.n_files_to_create() > 0
+
+
+def test_iiif_converter_create(converter):
+    converter.initialize_images()
+    converter.create()
+    for image in converter.images:
+        assert image.is_complete
