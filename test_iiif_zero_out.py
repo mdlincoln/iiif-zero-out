@@ -205,10 +205,12 @@ def test_iiif_image_custom_tiles_create(image_with_custom):
         + 1  # custom tile
         + 6  # downsized variations
     )
+    # Confirm that custom tile was successfully created
     assert image_with_custom.n_files_to_create() == n_target_tiles
     assert all([not t.exists for t in image_with_custom.tiles])
     assert image_with_custom.is_complete is False
     image_with_custom.create()
+    assert any(["10,40,45,60/20,30" in str(p.path) for p in image_with_custom.tiles])
 
 
 def test_iiif_image_partial(image):

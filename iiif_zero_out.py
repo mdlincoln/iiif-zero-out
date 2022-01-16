@@ -354,7 +354,7 @@ class ZeroConverter:
 
         for spec in specs:
             custom_tile_boxes = []
-            if "custom_tiles" in specs:
+            if "custom_tiles" in spec:
                 custom_tile_boxes = [BBox(**t) for t in spec["custom_tiles"]]
             img = IIIFImage(
                 converter_domain=self.domain,
@@ -379,16 +379,22 @@ class ZeroConverter:
     def n_files_to_create(self) -> int:
         return sum([image.n_files_to_create() for image in self.images])
 
+    @property
+    def incomplete_images(self) -> list[IIIFImage]:
+        """
+        Return only the images that have not yet been completed
+        """
+        return [i for i in self.images if not i.is_complete]
+
     def create(self) -> None:
         logging.info(f"Creating {self.n_files_to_create()} tiles")
-        for image in tqdm(self.images, leave=False):
+        for image in tqdm(self.incomplete_images, leave=False):
             image.create()
 
 
 def main():
     parser = argparse.ArgumentParser(
         description="IIIF Image API Level-0 static file generator",
-        usage="usage: %prog [options] (-h for help)",
     )
 
     parser.add_argument(
@@ -402,6 +408,13 @@ def main():
         default=None,
         help="Destination directory for tiles",
         required=True,
+    )
+
+    parser.add_argument(
+        "--domain",
+        "-d",
+        default="http://localhost",
+        help="Domain and base path to add to the '@id' attribute for every new image.",
     )
 
     parser.add_argument(
@@ -429,7 +442,7 @@ def main():
     converter = ZeroConverter(
         output_path=Path(args.output),
         specs=data,
-        domain="http://localhost",
+        domain=args.domain,
     )
     if args.clean:
         converter.clean()
