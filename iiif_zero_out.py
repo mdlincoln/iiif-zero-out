@@ -1,3 +1,4 @@
+import re
 import requests
 import json
 import requests
@@ -6,7 +7,7 @@ import os
 import shutil
 from pathlib import Path
 import logging
-import optparse
+import argparse
 
 
 BASE_SCALING_FACTORS = (1, 2, 4, 8, 16, 32, 64, 128, 256)
@@ -58,7 +59,12 @@ class IIIFTile:
     An individual tile that has both a parent IIIFImage, as well as a local filepath to be created from that downloaded image.
     """
 
-    def __init__(self, image_source_url: str, image_path: Path, bbox: BBox) -> None:
+    def __init__(
+        self,
+        image_source_url: str,
+        image_path: Path,
+        bbox: BBox,
+    ) -> None:
         self.image_source_url = image_source_url
         self.image_path = image_path
         self.bbox = bbox
@@ -187,7 +193,9 @@ class IIIFImage:
                         size_w=x[1],
                     )
                     tile = IIIFTile(
-                        image_path=self.path, image_source_url=self.source_url, bbox=bb
+                        image_path=self.path,
+                        image_source_url=self.source_url,
+                        bbox=bb,
                     )
                     self.tiles.append(tile)
 
@@ -315,7 +323,7 @@ class IIIFImage:
             logging.warning(
                 f"Image {self.identifier} has not had its children tiles initialized yet"
             )
-        for tile in self.tiles:
+        for tile in tqdm(self.tiles, leave=False):
             tile.create()
 
     def make_dir(self) -> None:
@@ -335,7 +343,7 @@ class ZeroConverter:
         output_path: Path,
         specs: list,
         domain: str,
-        tile_size: int = 256,
+        tile_size: int = 512,
         sleep: float = 0.0,
     ) -> None:
         self.path = output_path
@@ -365,7 +373,7 @@ class ZeroConverter:
         shutil.rmtree(self.path)
 
     def initialize_images(self) -> None:
-        for image in tqdm(self.images):
+        for image in tqdm(self.images, leave=False):
             image.initialize_children()
 
     def n_files_to_create(self) -> int:
@@ -373,39 +381,61 @@ class ZeroConverter:
 
     def create(self) -> None:
         logging.info(f"Creating {self.n_files_to_create()} tiles")
-        for image in tqdm(self.images):
+        for image in tqdm(self.images, leave=False):
             image.create()
 
 
 def main():
-    p = optparse.OptionParser(
+    parser = argparse.ArgumentParser(
         description="IIIF Image API Level-0 static file generator",
-        usage="usage: %prog [options] file (-h for help)",
+        usage="usage: %prog [options] (-h for help)",
     )
 
-    p.add_option(
+    parser.add_argument(
+        "urls",
+        help="JSON list of all URLs and identifiers",
+    )
+
+    parser.add_argument(
         "--output",
         "-o",
         default=None,
-        action="store",
         help="Destination directory for tiles",
+        required=True,
     )
 
-    p.add_option(
-        "--urls",
-        "-u",
-        default=None,
-        action="store",
-        help="JSON list of all URLs and identifiers",
+    parser.add_argument(
+        "--size",
+        "-s",
+        default=512,
+        type=int,
+        help="Tile size in pixels",
+    )
+
+    parser.add_argument(
+        "--clean",
+        "-c",
+        default=False,
+        action="store_true",
+        help="Clobber any cached JSON and tiles and start over.",
     )
 
     logging.basicConfig(format="%(asctime)s %(message)s", level=logging.INFO)
 
-    (opt, sources) = p.parse_args()
+    args = parser.parse_args()
 
-    data = json.load(open(sources[0], "r"))
+    data = json.load(open(args.urls, "r"))
 
     converter = ZeroConverter(
-        output_path=Path(opt.output), specs=data, domain="http://localhost"
+        output_path=Path(args.output),
+        specs=data,
+        domain="http://localhost",
     )
-    n = converter.n_files_to_create()
+    if args.clean:
+        converter.clean()
+    converter.initialize_images()
+    converter.create()
+
+
+if __name__ == "__main__":
+    main()
