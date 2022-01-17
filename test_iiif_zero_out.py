@@ -228,6 +228,13 @@ def converter(specs, tmp_path) -> ZeroConverter:
     )
 
 
+@pytest.fixture
+def large_converter(specs, tmp_path) -> ZeroConverter:
+    return ZeroConverter(
+        output_path=tmp_path, specs=specs, domain="http://localhost", tile_size=1024
+    )
+
+
 def test_iiif_converter_init(converter):
     assert len(converter.images) == 2
     assert converter.n_files_to_create() == 0
@@ -235,6 +242,13 @@ def test_iiif_converter_init(converter):
     converter.initialize_images()
     assert all([i.initialized for i in converter.images])
     assert converter.n_files_to_create() > 0
+
+
+def test_large_zero_converter(large_converter):
+    large_converter.initialize_images()
+    for i in large_converter.images:
+        for t in i.tiles:
+            "/1024,/0" in str(i.path)
 
 
 def test_iiif_converter_create(converter):
