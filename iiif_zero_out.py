@@ -204,8 +204,14 @@ class IIIFImage:
                     )
                     self.tiles.append(tile)
 
+    def init_fullsized_version(self) -> None:
+        fullsize_tile = IIIFTile(
+            image_source_url=self.source_url, image_path=self.path, bbox=BBox()
+        )
+        self.tiles.append(fullsize_tile)
+
     def init_downsized_versions(self) -> None:
-        ds_levels = IIIFImage.get_downsizing_levels(width=self.max_dim)
+        ds_levels = IIIFImage.get_downsizing_levels(width=self.info["width"])
         for ds in ds_levels:
             downsized_tile = IIIFTile(
                 image_source_url=self.source_url,
@@ -236,7 +242,7 @@ class IIIFImage:
             "sizes": [
                 {"width": ds, "height": "full"}
                 for ds in IIIFImage.get_downsizing_levels(width=input["width"])
-            ],
+            ].append({"width": "full", "height": "full"}),
             "tiles": [
                 {
                     "scaleFactors": IIIFImage.get_scaling_factors(
@@ -249,6 +255,12 @@ class IIIFImage:
             "width": input["width"],
             "height": input["height"],
         }
+
+        if "maxWidth" in input:
+            new_info["maxWidth"] = input["maxWidth"]
+        if "maxHeight" in input:
+            new_info["maxHeight"] = input["maxHeight"]
+
         return new_info
 
     def get_info(self) -> None:
@@ -317,6 +329,7 @@ class IIIFImage:
 
     def initialize_children(self) -> None:
         self.get_info()
+        self.init_fullsized_version()
         self.init_downsized_versions()
         self.init_default_tiles()
         if bool(self.custom_tile_boxes):
