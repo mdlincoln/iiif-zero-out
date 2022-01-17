@@ -1,14 +1,12 @@
-import re
 import requests
 import json
 import requests
 from tqdm import tqdm
-import os
 import shutil
 from pathlib import Path
 import logging
 import argparse
-
+import math
 
 BASE_SCALING_FACTORS = (1, 2, 4, 8, 16, 32, 64, 128, 256)
 BASE_SMALLER_SIZES = (16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192)
@@ -164,13 +162,20 @@ class IIIFImage:
         for sf in scaling_factors:
             cropsize = self.tile_size * sf
             full_widths = [
-                (i * cropsize, cropsize)
-                for i in range(0, self.info["width"] // cropsize)
+                (i * cropsize, cropsize, math.ceil(cropsize / sf))
+                for i in range(
+                    0,
+                    self.info["width"] // cropsize,
+                )
             ]
             remainder_width = self.info["width"] % cropsize
             if remainder_width > 0:
                 full_widths.append(
-                    (self.info["width"] - remainder_width, remainder_width)
+                    (
+                        self.info["width"] - remainder_width,
+                        remainder_width,
+                        math.ceil(remainder_width / sf),
+                    )
                 )
 
             full_heights = [
@@ -183,14 +188,14 @@ class IIIFImage:
                     (self.info["height"] - remainder_height, remainder_height)
                 )
 
-            for y in full_heights:
-                for x in full_widths:
+            for x in full_widths:
+                for y in full_heights:
                     bb = BBox(
                         region_x=x[0],
                         region_y=y[0],
                         region_w=x[1],
                         region_h=y[1],
-                        size_w=x[1],
+                        size_w=x[2],
                     )
                     tile = IIIFTile(
                         image_path=self.path,
@@ -343,7 +348,7 @@ class ZeroConverter:
         output_path: Path,
         specs: list,
         domain: str,
-        tile_size: int = 512,
+        tile_size: int,
         sleep: float = 0.0,
     ) -> None:
         self.path = output_path
@@ -443,6 +448,7 @@ def main():
         output_path=Path(args.output),
         specs=data,
         domain=args.domain,
+        tile_size=args.size,
     )
     if args.clean:
         converter.clean()
