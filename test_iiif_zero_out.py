@@ -138,6 +138,13 @@ def test_iiif_image_info(image, tmp_path, specs):
     assert image.info["@id"] == "http://localhost/30815-primary-0-nativeres.ptif"
 
 
+def test_iiif_image_fullsize_init(image):
+    assert bool(image.tiles) is False
+    image.get_info()
+    image.init_fullsized_version()
+    assert any(["full/full/" in t.url for t in image.tiles])
+
+
 def test_iiif_image_downscales_init(image, tmp_path, specs):
     assert bool(image.tiles) is False
     image.get_info()
@@ -203,7 +210,7 @@ def test_iiif_image_custom_tiles_create(image_with_custom):
         ((w // 128) * (h // 128 + 1))
         + ((w // 256 + 1) * (h // 256 + 1))
         + 1  # custom tile
-        + 6  # downsized variations
+        + 7  # downsized variations
     )
     # Confirm that custom tile was successfully created
     assert image_with_custom.n_files_to_create() == n_target_tiles
