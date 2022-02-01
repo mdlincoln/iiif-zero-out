@@ -277,6 +277,15 @@ class IIIFImage:
         with self.info_path.open("r") as info_file:
             self.info = json.load(info_file)
 
+    def prune(self) -> None:
+        """
+        Remove any images not needed in the specification
+        """
+        target_paths: list[Path] = [t.path for t in self.tiles]
+        for p in self.path.glob("**/*.jpg"):
+            if p not in target_paths:
+                p.unlink()
+
     def clean(self) -> None:
         """
         Clean this image's whole directory
@@ -341,6 +350,7 @@ class IIIFImage:
             logging.warning(
                 f"Image {self.identifier} has not had its children tiles initialized yet"
             )
+        self.prune()
         for tile in tqdm(self.tiles, leave=False):
             tile.create()
 
