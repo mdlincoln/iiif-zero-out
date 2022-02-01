@@ -9,7 +9,7 @@ import argparse
 import math
 
 BASE_SCALING_FACTORS = (1, 2, 4, 8, 16, 32, 64, 128, 256)
-BASE_SMALLER_SIZES = (16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192)
+BASE_SMALLER_SIZES = (16, 32, 64, 128, 256, 512)
 
 
 class BBox:
@@ -242,7 +242,7 @@ class IIIFImage:
             "sizes": [
                 {"width": ds, "height": "full"}
                 for ds in IIIFImage.get_downsizing_levels(width=input["width"])
-            ].append({"width": "full", "height": "full"}),
+            ],
             "tiles": [
                 {
                     "scaleFactors": IIIFImage.get_scaling_factors(
