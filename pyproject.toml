@@ -3,7 +3,7 @@ authors = ["Matthew Lincoln <matthew.d.lincoln@gmail.com>"]
 description = "Create a IIIF-0-compliant file structure from a live IIIF-1/2-compliant endpoint and a JSON file describing desired images, default tiling preferences, andy any custom detail tiles."
 license = "MIT"
 name = "iiif-zero-out"
-version = "0.1.0"
+version = "0.2.0"
 
 [tool.poetry.dependencies]
 pydantic-cli = "^4.3.0"
