@@ -1,33 +1,25 @@
-import requests
-import json
-import requests
-from tqdm import tqdm
-import shutil
-from pathlib import Path
-import logging
 import argparse
+import json
+import logging
 import math
+import shutil
+from typing import Optional
+from pathlib import Path
 
-BASE_SCALING_FACTORS = (1, 2, 4, 8, 16, 32, 64, 128, 256)
-BASE_SMALLER_SIZES = (16, 32, 64, 128, 256, 512)
+from tqdm import tqdm
+import requests
+from pydantic import BaseModel, Field, AnyUrl, PrivateAttr, FilePath, DirectoryPath
+
+from iiif_zero_out.settings import settings
 
 
-class BBox:
-    def __init__(
-        self,
-        region_x: int = None,
-        region_y: int = None,
-        region_w: int = None,
-        region_h: int = None,
-        size_w: int = None,
-        size_h: int = None,
-    ) -> None:
-        self.region_x = region_x
-        self.region_y = region_y
-        self.region_w = region_w
-        self.region_h = region_h
-        self.size_w = size_w
-        self.size_h = size_h
+class BBox(BaseModel):
+    region_x: Optional[int] = None
+    region_y: Optional[int] = None
+    region_w: Optional[int] = None
+    region_h: Optional[int] = None
+    size_w: Optional[int] = None
+    size_h: Optional[int] = None
 
     @property
     def region_string(self) -> str:
@@ -52,20 +44,14 @@ class BBox:
         return Path(self.region_string) / Path(self.size_string)
 
 
-class IIIFTile:
+class IIIFTile(BaseModel):
     """
     An individual tile that has both a parent IIIFImage, as well as a local filepath to be created from that downloaded image.
     """
 
-    def __init__(
-        self,
-        image_source_url: str,
-        image_path: Path,
-        bbox: BBox,
-    ) -> None:
-        self.image_source_url = image_source_url
-        self.image_path = image_path
-        self.bbox = bbox
+    image_source_url: str
+    image_path: Path
+    bbox: BBox
 
     @property
     def url(self) -> str:
@@ -73,8 +59,7 @@ class IIIFTile:
 
     @property
     def path(self) -> Path:
-        tile_path = self.image_path / self.bbox.path / "0/default.jpg"
-        return tile_path
+        return self.image_path / self.bbox.path / "0/default.jpg"
 
     @property
     def dir(self) -> Path:
@@ -110,29 +95,20 @@ class IIIFTile:
             shutil.rmtree(self.top_path)
 
 
-class IIIFImage:
+class IIIFImage(BaseModel):
     """
     An source image that has a source IIIF Image API info.json URL to be downloaded as well as a defined set of parameters needed: scaling factors, and arbitrary custom bboxes to be downloaded
     """
 
-    def __init__(
-        self,
-        converter_domain: str,
-        converter_path: Path,
-        tile_size: int,
-        source_url: str,
-        identifier: str,
-        custom_tile_boxes: list[BBox] = [],
-    ) -> None:
-        self.converter_domain = converter_domain
-        self.converter_path = converter_path
-        self.tile_size = tile_size
-        self.source_url = source_url
-        self.identifier = identifier
-        self.custom_tile_boxes = custom_tile_boxes
-        self.initialized = False  # Have all tile objects been initialized?
-        self.info = {}
-        self.tiles = []
+    converter_domain: str
+    converter_path: Path
+    tile_size: int
+    source_url: str
+    identifier: str
+    custom_tile_boxes: list[BBox] = []
+    initialized: bool = False
+    info: dict = {}
+    tiles: list[IIIFTile] = []
 
     @property
     def info_exists(self) -> bool:
@@ -144,7 +120,9 @@ class IIIFImage:
         Determine which scaling factors, used in the creation of partial tiles, should be created based on the original dimensions of the image.
         """
 
-        return [sf for sf in BASE_SCALING_FACTORS if sf <= min_dim // tile_size]
+        return [
+            sf for sf in settings.BASE_SCALING_FACTORS if sf <= min_dim // tile_size
+        ]
 
     @classmethod
     def get_downsizing_levels(cls, width: int) -> list[int]:
@@ -153,7 +131,7 @@ class IIIFImage:
 
         Requires requesting the original endpoint's info.json.
         """
-        return [s for s in BASE_SMALLER_SIZES if s < width]
+        return [s for s in settings.BASE_SMALLER_SIZES if s < width]
 
     def init_default_tiles(self) -> None:
         scaling_factors = IIIFImage.get_scaling_factors(
@@ -361,38 +339,44 @@ class IIIFImage:
         return sum([not tile.exists for tile in self.tiles])
 
 
-class ZeroConverter:
+class CustomTileSpec(BaseModel):
+    url: AnyUrl
+    identifier: str
+    custom_tiles: list[BBox] = []
+
+
+class ZeroOutConfig(BaseModel):
+    output: DirectoryPath = Field(..., description="Destination directory for tiles")
+    targets: FilePath = Field(..., description="JSON file containing list of ")
+    domain: AnyUrl = Field(
+        "http://localhost",
+        description="Domain and base path to add to the '@id' attribute for every new image.",
+    )
+    tile_size: int = Field(
+        default=512, gt=0, alias="size", description="Tile size in pixels"
+    )
+    clean: bool = Field(
+        default=False, description="Clobber any cached JSON and tiles and start over."
+    )
+    sleep: float = Field(
+        default=0.0,
+        description="Seconds to sleep between requesting tiles from the IIIF endpoint.",
+    )
+    _urls: list[CustomTileSpec] = PrivateAttr(default=[])
+
+    def read_urls(self):
+        with open(self.targets, "r") as target_file:
+            specs_list: list[dict] = json.load(target_file)
+            self._urls = [CustomTileSpec(**d) for d in specs_list]
+
+
+class ZeroConverter(BaseModel):
     """
-    Accepts the
+    Manages conversion specs and state
     """
 
-    def __init__(
-        self,
-        output_path: Path,
-        specs: list,
-        domain: str,
-        tile_size: int,
-        sleep: float = 0.0,
-    ) -> None:
-        self.path = output_path
-        self.domain = domain
-        self.tile_size = tile_size
-        self.sleep = sleep
-        self.images = []
-
-        for spec in specs:
-            custom_tile_boxes = []
-            if "custom_tiles" in spec:
-                custom_tile_boxes = [BBox(**t) for t in spec["custom_tiles"]]
-            img = IIIFImage(
-                converter_domain=self.domain,
-                converter_path=self.path,
-                source_url=spec["url"],
-                identifier=spec["identifier"],
-                tile_size=self.tile_size,
-                custom_tile_boxes=custom_tile_boxes,
-            )
-            self.images.append(img)
+    config: ZeroOutConfig
+    _images: list[IIIFImage] = PrivateAttr(default=[])
 
     def clean(self) -> None:
         """
@@ -400,84 +384,38 @@ class ZeroConverter:
         """
         shutil.rmtree(self.path)
 
+    def read_urls(self) -> None:
+        self.config.read_urls()
+
     def initialize_images(self) -> None:
-        for image in tqdm(self.images, leave=False):
+        assert len(self._images) == 0
+        self._images.clear()
+        self.read_urls()
+        for spec in self.config._urls:
+            img = IIIFImage(
+                converter_domain=self.config.domain,
+                converter_path=self.config.output,
+                source_url=spec.url,
+                identifier=spec.identifier,
+                tile_size=self.config.tile_size,
+                custom_tile_boxes=spec.custom_tiles,
+            )
+            self._images.append(img)
+
+        for image in tqdm(self._images, leave=False):
             image.initialize_children()
 
     def n_files_to_create(self) -> int:
-        return sum([image.n_files_to_create() for image in self.images])
+        return sum([image.n_files_to_create() for image in self._images])
 
     @property
     def incomplete_images(self) -> list[IIIFImage]:
         """
         Return only the images that have not yet been completed
         """
-        return [i for i in self.images if not i.is_complete]
+        return [i for i in self._images if not i.is_complete]
 
     def create(self) -> None:
         logging.info(f"Creating {self.n_files_to_create()} tiles")
         for image in tqdm(self.incomplete_images, leave=False):
             image.create()
-
-
-def main():
-    parser = argparse.ArgumentParser(
-        description="IIIF Image API Level-0 static file generator",
-    )
-
-    parser.add_argument(
-        "urls",
-        help="JSON list of all URLs and identifiers",
-    )
-
-    parser.add_argument(
-        "--output",
-        "-o",
-        default=None,
-        help="Destination directory for tiles",
-        required=True,
-    )
-
-    parser.add_argument(
-        "--domain",
-        "-d",
-        default="http://localhost",
-        help="Domain and base path to add to the '@id' attribute for every new image.",
-    )
-
-    parser.add_argument(
-        "--size",
-        "-s",
-        default=512,
-        type=int,
-        help="Tile size in pixels",
-    )
-
-    parser.add_argument(
-        "--clean",
-        "-c",
-        default=False,
-        action="store_true",
-        help="Clobber any cached JSON and tiles and start over.",
-    )
-
-    logging.basicConfig(format="%(asctime)s %(message)s", level=logging.INFO)
-
-    args = parser.parse_args()
-
-    data = json.load(open(args.urls, "r"))
-
-    converter = ZeroConverter(
-        output_path=Path(args.output),
-        specs=data,
-        domain=args.domain,
-        tile_size=args.size,
-    )
-    if args.clean:
-        converter.clean()
-    converter.initialize_images()
-    converter.create()
-
-
-if __name__ == "__main__":
-    main()
