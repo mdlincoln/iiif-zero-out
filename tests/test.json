@@ -1,28 +1,28 @@
-    [
-        {
-            "url": "https://printprobdb.psc.edu/iiif/books/clark/painesimmons_8675_309_00height_thedoctrine1ed/book_color/painesimmons_8675_309_00height_thedoctrine1ed-0021.tif",
-            "identifier": "painesimmons_8675_309_00height_thedoctrine1ed-0021",
-            "custom_tiles": [
-                {
-                    "region_x": 11,
-                    "region_y": 200,
-                    "region_width": 20,
-                    "region_height": 36,
-                    "size_width": 20,
-                    "size_height": 36
-                }
-            ]
-        },
-        {
-            "url": "https://printprobdb.psc.edu/iiif//books/restoration/anon_R6792_nynycbl_4_felodese1668/lines_color/anon_R6792_nynycbl_4_felodese1668-0012_page1r.tif",
-            "identifier": "lines-color/anon_R6792_nynycbl_4_felodese1668-0012_page1r.tif",
-            "custom_tiles": [
-                {
-                    "region_x": 1424,
-                    "region_y": 2252,
-                    "region_width": 58,
-                    "region_height": 73
-                }
-            ]
-        }
-    ]
+[
+    {
+        "url": "https://printprobdb.psc.edu/iiif/books/clark/painesimmons_8675_309_00height_thedoctrine1ed/book_color/painesimmons_8675_309_00height_thedoctrine1ed-0021.tif",
+        "identifier": "painesimmons_8675_309_00height_thedoctrine1ed-0021",
+        "custom_tiles": [
+            {
+                "region_x": 11,
+                "region_y": 200,
+                "region_width": 20,
+                "region_height": 36,
+                "size_width": 20,
+                "size_height": 36
+            }
+        ]
+    },
+    {
+        "url": "https://printprobdb.psc.edu/iiif//books/restoration/anon_R6792_nynycbl_4_felodese1668/lines_color/anon_R6792_nynycbl_4_felodese1668-0012_page1r.tif",
+        "identifier": "lines-color/anon_R6792_nynycbl_4_felodese1668-0012_page1r.tif",
+        "custom_tiles": [
+            {
+                "region_x": 1424,
+                "region_y": 2252,
+                "region_width": 58,
+                "region_height": 73
+            }
+        ]
+    }
+]

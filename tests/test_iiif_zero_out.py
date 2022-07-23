@@ -1,8 +1,10 @@
+import json
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import pytest
 
-from iiif_zero_out.models import BBox, IIIFTile, IIIFImage, ZeroConverter
+from iiif_zero_out.models import BBox, IIIFTile, IIIFImage, ZeroConverter, ZeroOutConfig
 
 
 class TestBBox:
@@ -52,8 +54,14 @@ def specs() -> list[dict]:
 
 
 @pytest.fixture
-def tile(tmp_path, specs) -> IIIFTile:
-    outdir_path = tmp_path / specs[0]["identifier"]
+def tmp_dir() -> Path:
+    with TemporaryDirectory() as tmpdir:
+        yield Path(tmpdir)
+
+
+@pytest.fixture
+def tile(tmp_dir, specs) -> IIIFTile:
+    outdir_path = tmp_dir / specs[0]["identifier"]
 
     test_bbox = BBox(region_x=10, region_y=40, region_w=45, region_h=60)
     return IIIFTile(
@@ -62,21 +70,20 @@ def tile(tmp_path, specs) -> IIIFTile:
 
 
 class TestTile:
-    def test_tile_init(self, tile, tmp_path):
+    def test_tile_init(self, tile, tmp_dir):
         assert (
             tile.url
             == "https://media.nga.gov/iiif/public/objects/3/0/8/1/5/30815-primary-0-nativeres.ptif/10,40,45,60/full/0/default.jpg"
         )
         assert (
             tile.path
-            == tmp_path
-            / "30815-primary-0-nativeres.ptif/10,40,45,60/full/0/default.jpg"
+            == tmp_dir / "30815-primary-0-nativeres.ptif/10,40,45,60/full/0/default.jpg"
         )
-        assert tile.top_path == tmp_path / "30815-primary-0-nativeres.ptif/10,40,45,60"
+        assert tile.top_path == tmp_dir / "30815-primary-0-nativeres.ptif/10,40,45,60"
 
-    def test_tile_create(self, tile, tmp_path):
+    def test_tile_create(self, tile, tmp_dir):
         target_path = (
-            tmp_path / "30815-primary-0-nativeres.ptif/10,40,45,60/full/0/default.jpg"
+            tmp_dir / "30815-primary-0-nativeres.ptif/10,40,45,60/full/0/default.jpg"
         )
         assert tile.exists is False
         tile.create()
@@ -92,10 +99,10 @@ class TestTile:
 
 
 @pytest.fixture
-def image(tmp_path, specs) -> IIIFImage:
+def image(tmp_dir, specs) -> IIIFImage:
     return IIIFImage(
         converter_domain="http://localhost",
-        converter_path=tmp_path,
+        converter_path=tmp_dir,
         source_url=specs[0]["url"],
         identifier=specs[0]["identifier"],
         tile_size=256,
@@ -103,10 +110,10 @@ def image(tmp_path, specs) -> IIIFImage:
 
 
 @pytest.fixture
-def image_with_custom(tmp_path, specs) -> IIIFImage:
+def image_with_custom(tmp_dir, specs) -> IIIFImage:
     return IIIFImage(
         converter_domain="http://localhost",
-        converter_path=tmp_path,
+        converter_path=tmp_dir,
         source_url=specs[1]["url"],
         identifier=specs[1]["identifier"],
         custom_tile_boxes=[BBox(**specs[1]["custom_tiles"][0])],
@@ -115,22 +122,22 @@ def image_with_custom(tmp_path, specs) -> IIIFImage:
 
 
 class TestImage:
-    def test_iiif_image_init(self, image, tmp_path, specs):
-        assert image.path == tmp_path / specs[0]["identifier"]
-        assert image.info_path == tmp_path / specs[0]["identifier"] / "info.json"
+    def test_iiif_image_init(self, image, tmp_dir, specs):
+        assert image.path == tmp_dir / specs[0]["identifier"]
+        assert image.info_path == tmp_dir / specs[0]["identifier"] / "info.json"
 
-    def test_iiif_image_dir(self, image, tmp_path, specs):
+    def test_iiif_image_dir(self, image, tmp_dir, specs):
         assert image.exists is False
         image.make_dir()
         assert image.exists
 
-    def test_iiif_image_clean(self, image, tmp_path, specs):
+    def test_iiif_image_clean(self, image, tmp_dir, specs):
         image.make_dir()
         assert image.exists
         image.clean()
         assert image.exists is False
 
-    def test_iiif_image_info(self, image, tmp_path, specs):
+    def test_iiif_image_info(self, image, tmp_dir, specs):
         assert image.info_path.exists() is False
         image.get_info()
         assert image.info_path.exists() is True
@@ -144,7 +151,7 @@ class TestImage:
         image.init_fullsized_version()
         assert any(["full/full/" in t.url for t in image.tiles])
 
-    def test_iiif_image_downscales_init(self, image, tmp_path, specs):
+    def test_iiif_image_downscales_init(self, image, tmp_dir, specs):
         assert bool(image.tiles) is False
         image.get_info()
         image.init_downsized_versions()
@@ -154,7 +161,7 @@ class TestImage:
         assert any(["full/32,/" in t.url for t in image.tiles])
         assert any(["full/16,/" in t.url for t in image.tiles])
 
-    def test_iiif_image_downscales_create(self, image, tmp_path, specs):
+    def test_iiif_image_downscales_create(self, image, tmp_dir, specs):
         assert bool(image.tiles) is False
         image.get_info()
         image.init_downsized_versions()
@@ -225,36 +232,75 @@ class TestImage:
 
 
 @pytest.fixture
-def converter(specs, tmp_path) -> ZeroConverter:
-    return ZeroConverter(
-        output_path=tmp_path, specs=specs, domain="http://localhost", tile_size=256
-    )
+def config_json(specs: list, tmp_dir: Path) -> Path:
+    json_filepath: Path = tmp_dir / "test_config.json"
+    with open(json_filepath, "w") as tmp_json:
+        json.dump(specs, tmp_json)
+    yield json_filepath
+    json_filepath.unlink()
+
+
+class TestZeroOutConfig:
+    def test_reject_no_directory(self, tmp_dir: Path, config_json: Path):
+        nonexistent_path = tmp_dir / "unreal_dir"
+        with pytest.raises(Exception):
+            ZeroOutConfig(
+                output=nonexistent_path,
+                targets=config_json,
+            )
+
+    def test_reject_no_json(self, tmp_dir: Path):
+        output_dir = tmp_dir / "outdir"
+        output_dir.mkdir()
+        nonexisting_json = tmp_dir / "nonexistent.json"
+        with pytest.raises(Exception):
+            ZeroOutConfig(
+                output=output_dir,
+                targets=nonexisting_json,
+            )
 
 
 @pytest.fixture
-def large_converter(specs, tmp_path) -> ZeroConverter:
-    return ZeroConverter(
-        output_path=tmp_path, specs=specs, domain="http://localhost", tile_size=1024
-    )
+def configs(tmp_dir: Path, config_json: Path) -> ZeroOutConfig:
+    return ZeroOutConfig(output=tmp_dir, targets=config_json)
+
+
+@pytest.fixture
+def large_configs(tmp_dir: Path, config_json: Path) -> ZeroOutConfig:
+    return ZeroOutConfig(output=tmp_dir, targets=config_json, tile_size=1024)
+
+
+@pytest.fixture
+def converter(configs: ZeroOutConfig) -> ZeroConverter:
+    return ZeroConverter(config=configs)
+
+
+@pytest.fixture
+def large_converter(large_configs: ZeroOutConfig) -> ZeroConverter:
+    return ZeroConverter(config=large_configs)
 
 
 class TestConverter:
-    def test_iiif_converter_init(self, converter):
-        assert len(converter.images) == 2
+    def test_read_urls(self, converter: ZeroConverter):
+        assert len(converter.config._urls) == 0
+        converter.read_urls()
+        assert len(converter.config._urls) == 2
+
+    def test_iiif_converter_initialize_images(self, converter: ZeroConverter):
         assert converter.n_files_to_create() == 0
-        assert all([not i.initialized for i in converter.images])
+        assert all([not i.initialized for i in converter._images])
         converter.initialize_images()
-        assert all([i.initialized for i in converter.images])
+        assert all([i.initialized for i in converter._images])
         assert converter.n_files_to_create() > 0
 
     def test_large_zero_converter(self, large_converter):
         large_converter.initialize_images()
-        for i in large_converter.images:
+        for i in large_converter._images:
             for t in i.tiles:
                 "/1024,/0" in str(i.path)
 
     def test_iiif_converter_create(self, converter):
         converter.initialize_images()
         converter.create()
-        for image in converter.images:
+        for image in converter._images:
             assert image.is_complete
